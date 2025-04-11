@@ -6,10 +6,21 @@ use voxel::Voxel;
 
 mod voxel;
 
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub enum MagmagridInitSet {
+    LoadTerrain,
+    DrawTerrain,
+}
+
 pub struct MagmagridPlugin;
 
 impl Plugin for MagmagridPlugin {
     fn build(&self, app: &mut App) {
+        app.configure_sets(
+            Startup,
+            (MagmagridInitSet::LoadTerrain, MagmagridInitSet::DrawTerrain),
+        );
+
         app.insert_resource(Magmagrid::default());
     }
 }
@@ -31,20 +42,23 @@ impl Magmagrid {
 
 impl Default for Magmagrid {
     fn default() -> Self {
+        let terrain_layer = TerrainLayer {
+            meshable: true,
+            meshing: Some(MeshingStrategy::Greedy),
+            generator: Perlin::new(rand::random()),
+        };
+
         Magmagrid::new(MagmagridConfig {
             scale: WorldScale {
                 base_layer: 0,
                 size: Vec3::ONE,
             },
-            material_layer_index: 0,
             layers: vec![WorldLayer {
                 name: "base".into(),
                 resolution: 16,
-                meshable: true,
                 relative_to: None,
                 inner_layer_index: None,
-                meshing: Some(MeshingStrategy::Greedy),
-                generator: Perlin::new(rand::random()),
+                layer: terrain_layer,
             }],
         })
     }
@@ -53,20 +67,49 @@ impl Default for Magmagrid {
 pub struct MagmagridConfig {
     pub scale: WorldScale,
     pub layers: Vec<WorldLayer>,
-
     // terrain specific
-    pub material_layer_index: usize,
+}
+
+impl MagmagridConfig {
+    pub fn outermost_layer_index(&self) -> usize {
+        /// Because layers can be defined in any order we need to follow the chain
+        fn chain_depth(mut index: usize, layers: &[WorldLayer]) -> usize {
+            let mut depth = 0;
+            while let Some(inner) = layers.get(index).and_then(|l| l.inner_layer_index) {
+                index = inner;
+                depth += 1;
+            }
+            depth
+        }
+
+        self.layers
+            .iter()
+            .enumerate()
+            .max_by_key(|(i, _)| chain_depth(*i, &self.layers))
+            .map(|(i, _)| i)
+            .expect("No layers defined in WorldConfig")
+    }
+}
+
+/// defines a layer in the world and its basic spatial information.
+///
+/// layer is where the actual behavior and data of the layer will live.
+///
+/// defaults to a terrain layer.
+#[derive(Debug, Clone)]
+pub struct WorldLayer<LayerType = TerrainLayer> {
+    pub name: String,
+    pub resolution: u32,
+    pub relative_to: Option<usize>,
+    pub inner_layer_index: Option<usize>,
+    pub layer: LayerType,
 }
 
 #[derive(Debug, Clone)]
-pub struct WorldLayer {
-    pub name: String,
-    pub resolution: u32,
-    pub meshable: bool,
-    pub relative_to: Option<usize>,
-    pub inner_layer_index: Option<usize>,
-    pub meshing: Option<MeshingStrategy>,
+pub struct TerrainLayer {
     pub generator: Perlin, // hardcoded perlin for now
+    pub meshable: bool,
+    pub meshing: Option<MeshingStrategy>,
 }
 
 #[derive(Debug, Clone)]

@@ -1,4 +1,7 @@
 use bevy::{color::palettes::css::RED, prelude::*};
+use magmagrid_debug::generate_debug_magmagrid;
+
+mod magmagrid_debug;
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct MagmagridGizmos {}
@@ -9,7 +12,8 @@ impl Plugin for StartracePlugin {
     fn build(&self, app: &mut App) {
         app.init_gizmo_group::<MagmagridGizmos>()
             .add_systems(Startup, setup)
-            .add_systems(Update, (draw_example_collection, update_config));
+            .add_systems(Update, (draw_example_collection, update_config))
+            .add_systems(Startup, generate_debug_magmagrid);
     }
 }
 
